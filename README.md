@@ -45,3 +45,6 @@ java -jar antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor -listener URL.g4
 ### 7. Conversor de MD para HTML
 
 [https://markdowntohtml.com/](https://)
+
+OBS: Certifique-se de deixar o antlr-4.13.2-complete.jar no caminho principal
+
