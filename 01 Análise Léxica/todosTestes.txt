@@ -1,0 +1,23 @@
+VÁLIDOS:
+- www.ufes.br
+- https://github.com:443/user/repo?tab=projects#readme
+- ftp://ftp.example.com/files/arquivo.txt
+- http://localhost:8080/path/to/page
+- https://192.168.1.1/admin?login=true
+- ftp://downloads.site.com:2121/pub/software.zip
+- http://site.com/pagina.html?search=compiladores#intro
+- https://api.service.org/v1/data?limit=10
+- https://ecampus.ufam.edu.br/ecampus/home/login
+- mirror.ufes.br/iso/ubuntu.iso?mirror=br
+
+INVÁLIDOS:
+- httpx://site.invalido.com         		(Protocolo inválido)
+- http:/site.com                    		(Barra faltando)
+- https//google.com                 		(Dois-pontos faltando)
+- ftp:example.com                   		(Barras faltando)
+- http://@@@.com                    		(Domínio com caractere inválido)
+- https://site..com/path            		(Domínio mal formado)
+- http://site.com:porta             		(Porta não numérica)
+- ftp://site.com/path?query=value#erro?#% 	(Caractere reservado não escapado no fragmento: "?", "#" ou "%")
+- http://site.com/path?=semchave    		(Query sem chave)
+- https://site.com/path#!section    		(Caractere inválido no fragmento)
