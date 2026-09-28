@@ -85,8 +85,10 @@ class ExpressionGrader:
         return None
 
     def check_imports(self, main_py):
+        """Verifica se os módulos importados no main.py existem na pasta do aluno"""
         try:
-            content = main_py.read_text(encoding='utf-8')
+            content = main_py.read_text(encoding='utf-8-sig')
+            content = content.lstrip('\ufeff')
             imports = re.findall(r'^\s*(?:from\s+(\w+)\s+import|import\s+(\w+))',
                                  content, re.MULTILINE)
             ignorar = {'antlr4', 'sys', 'os', 're', 'math', 'io', 'typing',
@@ -108,7 +110,8 @@ class ExpressionGrader:
 
     def check_main_py_truncado(self, main_py):
         try:
-            content = main_py.read_text(encoding='utf-8').rstrip()
+            content = main_py.read_text(encoding='utf-8-sig').rstrip()
+            content = content.lstrip('\ufeff')
             if not content:
                 return "main.py está vazio"
             ultima = content.split('\n')[-1].strip()
@@ -126,7 +129,8 @@ class ExpressionGrader:
 
     def check_programa_sem_input(self, main_py):
         try:
-            content = main_py.read_text(encoding='utf-8')
+            content = main_py.read_text(encoding='utf-8-sig')
+            content = content.lstrip('\ufeff')
             tem_lista = re.search(r'testes?\s*=\s*\[[^\]]*["\'][^"\']*["\'][^\]]*\]',
                                   content, re.DOTALL | re.IGNORECASE)
             tem_loop = re.search(r'for\s+\w+\s+in\s+testes?', content)
@@ -163,7 +167,6 @@ class ExpressionGrader:
         except Exception as e:
             return False, f"Erro: {str(e)}"
 
-    #   v8.1: usa self.student_dir no classpath
     def compile_java_classes(self):
         """Compila todos os .java com javac"""
         java_files = list(self.student_dir.glob("*.java"))
@@ -234,7 +237,8 @@ class ExpressionGrader:
     # ================================================================
     def detect_program_type(self, main_py):
         try:
-            content = main_py.read_text(encoding='utf-8')
+            content = main_py.read_text(encoding='utf-8-sig')
+            content = content.lstrip('\ufeff')
             n_inputs = content.count('input(')
             n_argv = content.count('sys.argv')
             if n_inputs > 0 and n_argv == 0:
@@ -415,7 +419,6 @@ class ExpressionGrader:
     # ================================================================
     # EXECUÇÃO JAVA
     # ================================================================
-    #   v8.1: usa self.student_dir no classpath
     def run_java_test(self, main_class, expression, timeout=5):
         """Executa o programa Java com a expressão como argumento."""
         cp = f"antlr-4.13.2-complete.jar:{self.student_dir}"
@@ -550,6 +553,7 @@ class ExpressionGrader:
         self.update_nota_md(results)
         return total, results
 
+    # 🔥 v10: compile_grammar ANTES de check_imports
     def _grade_python_student(self):
         """Fluxo Python"""
         main_py = self.find_main_py()
@@ -560,37 +564,43 @@ class ExpressionGrader:
 
         print_flush(f"  Arquivo Python: {main_py.name}")
 
+        # 1. Verifica se só roda testes fixos
         erro_sem_input = self.check_programa_sem_input(main_py)
         if erro_sem_input:
             print_flush(f"{Colors.RED}✗ {erro_sem_input}{Colors.END}")
             self.update_nota_md_with_error(erro_sem_input)
             return 0.0, {}
 
+        # 2. Verifica se main.py está truncado
         erro_trunc = self.check_main_py_truncado(main_py)
         if erro_trunc:
             print_flush(f"{Colors.RED}✗ {erro_trunc}{Colors.END}")
             self.update_nota_md_with_error(erro_trunc)
             return 0.0, {}
 
+        # 3. Verifica se tem gramática
         grammar_file = self.find_grammar_file()
         if not grammar_file:
             print_flush(f"{Colors.RED}✗ Nenhum arquivo de gramática encontrado{Colors.END}")
             self.update_nota_md_with_error("Arquivo de gramática não encontrado")
             return 0.0, {}
 
-        missing = self.check_imports(main_py)
-        if missing:
-            msg = f"Módulos não encontrados: {', '.join(missing)}"
-            print_flush(f"{Colors.RED}✗ {msg}{Colors.END}")
-            self.update_nota_md_with_error(msg)
-            return 0.0, {}
-
+        # 🔥 v10: COMPILA A GRAMÁTICA ANTES de checar imports
+        # (o aluno não envia ExprLexer.py/ExprParser.py, eles são gerados pelo ANTLR)
         ok, msg = self.compile_grammar(language="Python3")
         if not ok:
             print_flush(f"{Colors.RED}✗ {msg}{Colors.END}")
             self.update_nota_md_with_compilation_error(msg)
             return 0.0, {}
         print_flush(f"{Colors.GREEN}✓ Gramática compilada com sucesso{Colors.END}")
+
+        # 🔥 v10: AGORA checa imports (os arquivos gerados já existem)
+        missing = self.check_imports(main_py)
+        if missing:
+            msg = f"Módulos não encontrados: {', '.join(missing)}"
+            print_flush(f"{Colors.RED}✗ {msg}{Colors.END}")
+            self.update_nota_md_with_error(msg)
+            return 0.0, {}
 
         tests = [
             ("(5*4)", 20), ("2 + 3", 5), ("abs(-10)", 10),
