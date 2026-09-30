@@ -82,11 +82,9 @@ class ExpressionGrader:
                 return f
         return None
 
+    #   v11: retorna só `missing` (sem aviso_visitor)
     def check_imports(self, main_py):
-        """
-        Verifica se os módulos importados no main.py existem na pasta do aluno.
-        Também verifica se o aluno usou Listener em vez de Visitor.
-        """
+        """Verifica se os módulos importados no main.py existem na pasta do aluno"""
         try:
             content = main_py.read_text(encoding='utf-8-sig')
             imports = re.findall(r'^\s*(?:from\s+(\w+)\s+import|import\s+(\w+))',
@@ -103,19 +101,10 @@ class ExpressionGrader:
                 if not (self.student_dir / f"{modulo}.py").exists() \
                    and not (self.student_dir / modulo).exists():
                     missing.append(modulo)
-
-            # Aviso se usou Listener em vez de Visitor
-            aviso_visitor = None
-            if re.search(r'from\s+\w*Listener\s+import', content) or \
-               re.search(r'import\s+\w*Listener\b', content):
-                if not re.search(r'from\s+\w*Visitor\s+import', content):
-                    aviso_visitor = "Usou Listener em vez de Visitor"
-
             seen = set()
-            missing = [m for m in missing if not (m in seen or seen.add(m))]
-            return missing, aviso_visitor
-        except Exception:
-            return [], None
+            return [m for m in missing if not (m in seen or seen.add(m))]
+        except:
+            return []
 
     def check_main_py_truncado(self, main_py):
         try:
@@ -151,17 +140,29 @@ class ExpressionGrader:
         except:
             return None
 
+    #   v11: ignora linhas de import e checa só o código
     def check_usa_visitor(self, main_py):
         """Verifica se o main.py realmente usa o padrão Visitor"""
         try:
             content = main_py.read_text(encoding='utf-8-sig')
             content = content.lstrip('\ufeff')
-            usa_visitor = bool(re.search(r'\.visit\s*\(', content)) or \
-                          bool(re.search(r'Visitor\s*\(', content))
-            usa_listener = bool(re.search(r'walker\.walk\s*\(', content)) or \
-                           bool(re.search(r'Listener\s*\(', content))
+
+            # Remove linhas de import para evitar falsos positivos
+            # (ex: "from antlr4.error.ErrorListener import ErrorListener")
+            linhas_sem_import = []
+            for linha in content.split('\n'):
+                stripped = linha.strip()
+                if stripped.startswith('import ') or stripped.startswith('from '):
+                    continue
+                linhas_sem_import.append(linha)
+            codigo = '\n'.join(linhas_sem_import)
+
+            usa_visitor = bool(re.search(r'\.visit\s*\(', codigo))
+            usa_listener = bool(re.search(r'\.walk\s*\(', codigo)) or \
+                           bool(re.search(r'walker\.walk\s*\(', codigo))
+
             if usa_listener and not usa_visitor:
-                return "Programa usa Listener em vez de Visitor"
+                return "Usou Listener em vez de Visitor"
             if not usa_visitor:
                 return "Programa não usa .visit() (esperado padrão Visitor)"
             return None
@@ -580,7 +581,7 @@ class ExpressionGrader:
         erro_visitor = self.check_usa_visitor(main_py)
         if erro_visitor:
             print_flush(f"{Colors.RED}✗ {erro_visitor}{Colors.END}")
-            self.update_nota_md_with_error(erro_visitor)
+            self.update_nota_md_usou_listener(erro_visitor)
             return 0.0, {}
 
         # 2. Verifica se só roda testes fixos
@@ -613,18 +614,11 @@ class ExpressionGrader:
         print_flush(f"{Colors.GREEN}✓ Gramática compilada com sucesso{Colors.END}")
 
         # 6. Agora checa imports (os arquivos gerados já existem)
-        missing, aviso_visitor = self.check_imports(main_py)
+        missing = self.check_imports(main_py)
         if missing:
             msg = f"Módulos não encontrados: {', '.join(missing)}"
             print_flush(f"{Colors.RED}✗ {msg}{Colors.END}")
             self.update_nota_md_with_error(msg)
-            return 0.0, {}
-
-        #  v10: aluno usou Listener → zera a nota e registra nas considerações
-        if aviso_visitor:
-            print_flush(f"{Colors.YELLOW}⚠ {aviso_visitor}{Colors.END}")
-            print_flush(f"{Colors.RED}✗ {aviso_visitor}{Colors.END}")
-            self.update_nota_md_usou_listener(aviso_visitor)
             return 0.0, {}
 
         tests = [
@@ -681,7 +675,6 @@ class ExpressionGrader:
     # ================================================================
     # NOTA.MD
     # ================================================================
-    #  v10: aluno usou Listener em vez de Visitor
     def update_nota_md_usou_listener(self, aviso_msg):
         """
         Usado quando o aluno usou Listener em vez de Visitor.
@@ -689,16 +682,16 @@ class ExpressionGrader:
         """
         nota_path = self.student_dir / "nota.md"
         original = nota_path.read_text(encoding='utf-8') if nota_path.exists() else ""
-        
+
         obs = {}
         for i in range(1, 11):
             m = re.search(rf"### Teste {i}:\s*\n.*?\nObservação: (.*?)(?:\n|$)", original, re.DOTALL)
             obs[i] = m.group(1).strip() if m else "Valor esperado: [ver nota.md original]"
-        
+
         content = "## Aceitação:\n\n"
         for i in range(1, 11):
             content += f"### Teste {i}:\nPonto: 0<br>\nObservação: {obs[i]}<br>\n\n"
-        
+
         content += f"## Considerações:\n{aviso_msg}\n\n## Nota Final: 0.0\n"
         nota_path.write_text(content, encoding='utf-8')
 

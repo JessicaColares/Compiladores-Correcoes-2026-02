@@ -553,7 +553,7 @@ class ExpressionGrader:
         self.update_nota_md(results)
         return total, results
 
-    # 🔥 v10: compile_grammar ANTES de check_imports
+    #   v10: compile_grammar ANTES de check_imports
     def _grade_python_student(self):
         """Fluxo Python"""
         main_py = self.find_main_py()
@@ -585,7 +585,7 @@ class ExpressionGrader:
             self.update_nota_md_with_error("Arquivo de gramática não encontrado")
             return 0.0, {}
 
-        # 🔥 v10: COMPILA A GRAMÁTICA ANTES de checar imports
+        #   v10: COMPILA A GRAMÁTICA ANTES de checar imports
         # (o aluno não envia ExprLexer.py/ExprParser.py, eles são gerados pelo ANTLR)
         ok, msg = self.compile_grammar(language="Python3")
         if not ok:
@@ -594,7 +594,7 @@ class ExpressionGrader:
             return 0.0, {}
         print_flush(f"{Colors.GREEN}✓ Gramática compilada com sucesso{Colors.END}")
 
-        # 🔥 v10: AGORA checa imports (os arquivos gerados já existem)
+        #   v10: AGORA checa imports (os arquivos gerados já existem)
         missing = self.check_imports(main_py)
         if missing:
             msg = f"Módulos não encontrados: {', '.join(missing)}"
