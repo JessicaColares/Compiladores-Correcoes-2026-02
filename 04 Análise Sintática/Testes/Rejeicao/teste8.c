@@ -1,0 +1,3 @@
+void exemplo() {
+    int x  
+} 
