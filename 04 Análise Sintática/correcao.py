@@ -131,7 +131,7 @@ class MiniCGrader:
                 or "error" in output.lower()
                 or "erro" in output.lower()
                 or "exception" in output.lower()
-                or "line " in output.lower() and ":" in output  # erros do ANTLR: "line X:Y ..."
+                or "line " in output.lower() and ":" in output
             )
             return output, tem_erro
         except subprocess.TimeoutExpired:
@@ -243,66 +243,126 @@ class MiniCGrader:
     # NOTA.MD
     # ================================================================
     def update_nota_md_error(self, error_msg):
-        """Atualiza o nota.md com mensagem de erro (zera tudo)"""
+        """Atualiza o nota.md com mensagem de erro — preserva o conteúdo original"""
         nota_path = self.student_dir / "nota.md"
+        original = nota_path.read_text(encoding='utf-8') if nota_path.exists() else ""
 
-        content = "# Análise sintática da Linguagem MiniC\n\n"
+        linhas = original.split('\n')
+        saida = []
+        secao_atual = None
 
-        content += "## Aceitação:\n\n"
-        for i in range(1, 11):
-            content += f"### Teste {i}:\nPonto: 0<br>\nObservação: {error_msg}<br>\n\n"
+        for linha in linhas:
+            stripped = linha.strip()
 
-        content += "## Rejeição:\n\n"
-        for i in range(1, 11):
-            content += f"### Teste {i}:\nPonto: 0<br>\nObservação: {error_msg}<br>\n\n"
+            if stripped == "## Aceitação:":
+                secao_atual = "aceitacao"
+                saida.append(linha)
+                continue
+            elif stripped == "## Rejeição:":
+                secao_atual = "rejeicao"
+                saida.append(linha)
+                continue
+            elif stripped.startswith("## "):
+                secao_atual = None
+                saida.append(linha)
+                continue
 
-        content += f"## Considerações:\n{error_msg}\n\n## Nota Final: 0.0\n"
+            if secao_atual and re.match(r'Ponto:', stripped):
+                saida.append("Ponto: 0<br>")
+                continue
+
+            if secao_atual and re.match(r'Observação:', stripped):
+                saida.append(f"Observação: {error_msg}<br>")
+                continue
+
+            saida.append(linha)
+
+        content = '\n'.join(saida)
+
+        # Atualiza Considerações (mantém a seção, muda o texto)
+        content = re.sub(
+            r'(## Considerações:\s*\n).*?(\n## Nota Final:)',
+            rf'\1{error_msg}\n\2',
+            content,
+            flags=re.DOTALL
+        )
+
+        # Atualiza Nota Final
+        content = re.sub(
+            r'## Nota Final:\s*[\d.]*',
+            '## Nota Final: 0.0',
+            content
+        )
 
         nota_path.write_text(content, encoding='utf-8')
 
     def update_nota_md(self, results):
-        """Atualiza o arquivo nota.md do aluno com os resultados"""
+        """Atualiza o nota.md do aluno com os resultados — preserva o conteúdo original"""
         nota_path = self.student_dir / "nota.md"
+        original = nota_path.read_text(encoding='utf-8') if nota_path.exists() else ""
 
-        content = "# Análise sintática da Linguagem MiniC\n\n"
+        linhas = original.split('\n')
+        saida = []
+        secao_atual = None
+        teste_atual = None
 
-        # --- Aceitação ---
-        content += "## Aceitação:\n\n"
-        for i in range(1, 11):
-            key = f"aceitacao_{i}"
-            if key in results:
-                r = results[key]
-                content += f"""### Teste {i}:
+        for linha in linhas:
+            stripped = linha.strip()
 
-Ponto: {r['score']:.1f}<br>
-Observação: {r['obs']}<br>
+            if stripped == "## Aceitação:":
+                secao_atual = "aceitacao"
+                teste_atual = None
+                saida.append(linha)
+                continue
+            elif stripped == "## Rejeição:":
+                secao_atual = "rejeicao"
+                teste_atual = None
+                saida.append(linha)
+                continue
+            elif stripped.startswith("## "):
+                secao_atual = None
+                teste_atual = None
+                saida.append(linha)
+                continue
 
-"""
-            else:
-                content += f"### Teste {i}:\nPonto: 0<br>\nObservação: não executado<br>\n\n"
+            m = re.match(r'### Teste (\d+):', stripped)
+            if m and secao_atual:
+                teste_atual = int(m.group(1))
+                saida.append(linha)
+                continue
 
-        # --- Rejeição ---
-        content += "## Rejeição:\n\n"
-        for i in range(1, 11):
-            key = f"rejeicao_{i}"
-            if key in results:
-                r = results[key]
-                content += f"""### Teste {i}:
+            if teste_atual is not None and secao_atual:
+                key = f"{secao_atual}_{teste_atual}"
 
-Ponto: {r['score']:.1f}<br>
-Observação: {r['obs']}<br>
+                if re.match(r'Ponto:', stripped):
+                    score = results[key]['score'] if key in results else 0.0
+                    saida.append(f"Ponto: {score:.1f}<br>")
+                    continue
 
-"""
-            else:
-                content += f"### Teste {i}:\nPonto: 0<br>\nObservação: não executado<br>\n\n"
+                if re.match(r'Observação:', stripped):
+                    obs = results[key]['obs'] if key in results else "não executado"
+                    saida.append(f"Observação: {obs}<br>")
+                    continue
 
-        # --- Considerações ---
+            saida.append(linha)
+
+        content = '\n'.join(saida)
+
+        # Atualiza Considerações (mantém a seção vazia, como no modelo)
+        content = re.sub(
+            r'(## Considerações:\s*\n).*?(\n## Nota Final:)',
+            r'\1\n\2',
+            content,
+            flags=re.DOTALL
+        )
+
+        # Atualiza Nota Final
         total = sum(r['score'] for r in results.values() if 'score' in r)
-        content += f"""## Considerações:
-
-
-## Nota Final: {total:.1f}
-"""
+        content = re.sub(
+            r'## Nota Final:\s*[\d.]*',
+            f'## Nota Final: {total:.1f}',
+            content
+        )
 
         nota_path.write_text(content, encoding='utf-8')
 
